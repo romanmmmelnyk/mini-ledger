@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id       Int     @id @default(autoincrement())
+  email    String  @unique
+  name     String?
+  password String
+  sent     Entry[] @relation("sender")
+  received Entry[] @relation("receiver")
+}
+
+enum EntryType {
+  TRANSFER
+  TOP_UP
+  WITHDRAWAL
+}
+
+model Transaction {
+  id              Int      @id @default(autoincrement())
+  idempotency_key String   @unique
+  date            DateTime @default(now())
+  entries         Entry[]
+}
+
+model Entry {
+  id             Int         @id @default(autoincrement())
+  transaction_id Int
+  transaction    Transaction @relation(fields: [transaction_id], references: [id])
+  type           EntryType
+  /// Amount in kopiykas. 1050 means 10.50.
+  amount         Int
+  sender_id      Int?
+  sender         User?       @relation("sender", fields: [sender_id], references: [id])
+  receiver_id    Int?
+  receiver       User?       @relation("receiver", fields: [receiver_id], references: [id])
+}
