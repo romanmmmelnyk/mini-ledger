@@ -23,6 +23,6 @@ export class BalanceService {
       return total;
     }, 0);
 
-    return { balance };
+    return { balance: balance / 100 };
   }
 }

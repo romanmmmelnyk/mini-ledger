@@ -1,19 +1,27 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, UserStatus } from '@prisma/client';
+import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
 
 const users = [
-  { email: 'alice@example.com', name: 'Alice', password: '1234' },
-  { email: 'bob@example.com', name: 'Bob', password: '1234' },
-  { email: 'carol@example.com', name: 'Carol', password: '1234' },
+  { email: 'alice@example.com', name: 'Alice' },
+  { email: 'bob@example.com', name: 'Bob' },
+  { email: 'carol@example.com', name: 'Carol' },
 ];
 
 async function main() {
+  const passwordHash = await argon2.hash('1234', { type: argon2.argon2id });
+
   for (const user of users) {
     await prisma.user.upsert({
       where: { email: user.email },
-      update: { name: user.name, password: user.password },
-      create: user,
+      update: { name: user.name, passwordHash, status: UserStatus.ACTIVE },
+      create: {
+        email: user.email,
+        name: user.name,
+        passwordHash,
+        status: UserStatus.ACTIVE,
+      },
     });
   }
 }

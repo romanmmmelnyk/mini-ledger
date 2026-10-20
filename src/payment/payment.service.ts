@@ -2,14 +2,14 @@ import {BadRequestException, Injectable, NotFoundException} from "@nestjs/common
 import {PrismaService} from "../prisma/prisma.service";
 import {PaymentDto} from "./dto/payment.dto";
 import {TopUpDto} from "./dto/topup.dto";
-import {AccountService} from "../account/account.service";
-import {BalanceService} from "../account/balance.service";
+import {AuthService} from "../auth/auth.service";
+import {BalanceService} from "../balance/balance.service";
 import {EntryType, User} from "@prisma/client";
 import {randomUUID} from "node:crypto";
 
 @Injectable()
 export class PaymentService {
-    constructor(private readonly prisma: PrismaService, private readonly accountService: AccountService, private readonly balanceService: BalanceService) {}
+    constructor(private readonly prisma: PrismaService, private readonly authService: AuthService, private readonly balanceService: BalanceService) {}
 
     async sendPayment({sender, receiver, amount}: {
         sender: User;
@@ -46,15 +46,17 @@ export class PaymentService {
 
     }
 
-    async checkUsers(dto: PaymentDto) {
-        const sender = await this.accountService.checkUser(dto.senderEmail, dto.senderPassword);
-        if (!sender) {
-            throw new NotFoundException("No such sender or password doesn't match");
-        }
+    async checkUsers(dto: PaymentDto, senderId: string) {
+        const sender = await this.authService.findById(senderId);
 
-        const receiver = await this.accountService.getUserEmail(dto.receiverEmail);
+        const receiver = await this.authService.findByEmail(dto.receiverEmail);
         if (!receiver) {
             throw new NotFoundException("No receiver email match");
+        } else if (!sender) {
+            throw new NotFoundException("Getting problems finding you");
+        }
+        if (!dto.amount) {
+            throw new BadRequestException("No amount found");
         }
 
         return {
@@ -63,8 +65,13 @@ export class PaymentService {
         }
     }
 
-    async topUp(dto: TopUpDto) {
-        const user = await this.accountService.checkUser(dto.email, dto.password);
+    async topUp(dto: TopUpDto, userId: string) {
+        const user = await this.authService.findById(userId);
+
+        if (!user) {
+            throw new NotFoundException("No user found");
+        }
+
 
         if (!Number.isInteger(dto.amount) || dto.amount <= 0) {
             throw new BadRequestException("Amount must be a positive number");

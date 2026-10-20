@@ -8,12 +8,19 @@ datasource db {
 }
 
 model User {
-  id       Int     @id @default(autoincrement())
-  email    String  @unique
-  name     String?
-  password String
+  id Int @id @default(autoincrement())
+
+  email           String    @unique
+  emailVerifiedAt DateTime?
+
+  name         String?
+  status       UserStatus @default(PENDING_VERIFICATION)
+  passwordHash String?
+
   sent     Entry[] @relation("sender")
   received Entry[] @relation("receiver")
+
+  createdAt DateTime @default(now())
 }
 
 enum EntryType {
@@ -40,4 +47,11 @@ model Entry {
   sender         User?       @relation("sender", fields: [sender_id], references: [id])
   receiver_id    Int?
   receiver       User?       @relation("receiver", fields: [receiver_id], references: [id])
+}
+
+// ENUMS
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
 }
