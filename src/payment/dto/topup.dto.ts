@@ -1,3 +1,4 @@
 export class TopUpDto {
-    amount: number;
+  accountId: number;
+  amount: number;
 }

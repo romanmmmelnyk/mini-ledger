@@ -1,103 +1,136 @@
-import {BadRequestException, Injectable, NotFoundException} from "@nestjs/common";
-import {PrismaService} from "../prisma/prisma.service";
-import {PaymentDto} from "./dto/payment.dto";
-import {TopUpDto} from "./dto/topup.dto";
-import {AuthService} from "../auth/auth.service";
-import {BalanceService} from "../balance/balance.service";
-import {EntryType, User} from "@prisma/client";
-import {randomUUID} from "node:crypto";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { AccountType, TransactionType } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
+import { BalanceService } from '../balance/balance.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { PaymentDto } from './dto/payment.dto';
+import { TopUpDto } from './dto/topup.dto';
+import {CurrencyService} from "../currency/currency.service";
 
 @Injectable()
 export class PaymentService {
-    constructor(private readonly prisma: PrismaService, private readonly authService: AuthService, private readonly balanceService: BalanceService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly balanceService: BalanceService,
+    private readonly currencyService: CurrencyService
+  ) {}
 
-    async sendPayment({sender, receiver, amount}: {
-        sender: User;
-        receiver: User;
-        amount: number;
-    }) {
-        const balanceEligible = (await this.balanceService.getBalanceByUserId(sender.id)).balance;
-        if (amount > balanceEligible) {
-            throw new BadRequestException("Now enough funds");
-        }
+  async sendPayment(dto: PaymentDto, userId: string) {
+    this.assertAmount(dto.amount);
+    let receiver_amount = dto.amount;
 
-        const transaction = await this.prisma.transaction.create({
-            data: {
-                idempotency_key: randomUUID(),
-                entries: {
-                    create: {
-                        type: EntryType.TRANSFER,
-                        amount,
-                        sender_id: sender.id,
-                        receiver_id: receiver.id,
-                    },
-                },
-            },
-        });
-        const senderBalance = await this.balanceService.getBalanceByUserId(sender.id);
-        const receiverBalance = await this.balanceService.getBalanceByUserId(receiver.id);
-        return {
-            status: "ok",
-            transactionId: transaction.id,
-            amount,
-            senderBalance: senderBalance.balance,
-            receiverBalance: receiverBalance.balance,
-        };
-
+    if (dto.senderAccountId === dto.receiverAccountId) {
+      throw new BadRequestException('Use two different accounts');
     }
 
-    async checkUsers(dto: PaymentDto, senderId: string) {
-        const sender = await this.authService.findById(senderId);
-
-        const receiver = await this.authService.findByEmail(dto.receiverEmail);
-        if (!receiver) {
-            throw new NotFoundException("No receiver email match");
-        } else if (!sender) {
-            throw new NotFoundException("Getting problems finding you");
-        }
-        if (!dto.amount) {
-            throw new BadRequestException("No amount found");
-        }
-
-        return {
-            sender,
-            receiver,
-        }
+    const sender = await this.ownedAccount(dto.senderAccountId, userId);
+    const receiver = await this.prisma.account.findFirst({
+      where: { id: dto.receiverAccountId, user_id: { not: null } },
+      select: {id: true, entries: true, currency: true}
+    });
+    if (!receiver) {
+      throw new NotFoundException('Receiver account not found');
     }
 
-    async topUp(dto: TopUpDto, userId: string) {
-        const user = await this.authService.findById(userId);
-
-        if (!user) {
-            throw new NotFoundException("No user found");
-        }
-
-
-        if (!Number.isInteger(dto.amount) || dto.amount <= 0) {
-            throw new BadRequestException("Amount must be a positive number");
-        }
-
-        const transaction = await this.prisma.transaction.create({
-            data: {
-                idempotency_key: randomUUID(),
-                entries: {
-                    create: {
-                        type: EntryType.TOP_UP,
-                        amount: dto.amount,
-                        receiver_id: user.id,
-                    },
-                },
-            },
-        });
-
-        const {balance} = await this.balanceService.getBalanceByUserId(user.id);
-
-        return {
-            status: "ok",
-            email: user.email,
-            amount: dto.amount,
-            transactionId: transaction.id,
-            balance,
-        };
+    const senderBalance = await this.balanceService.getBalanceByAccountId(
+      sender.id,
+    );
+    if (dto.amount > senderBalance) {
+      throw new BadRequestException('Not enough funds');
     }
+
+    if (sender.currency.code !== receiver.currency.code) {
+      receiver_amount = dto.amount * (await this.currencyService.getExchangeRate(sender.currency.code, receiver.currency.code))
+    }
+
+    const transaction = await this.prisma.transaction.create({
+      data: {
+        idempotency_key: randomUUID(),
+        type: TransactionType.TRANSFER,
+        entries: {
+          create: [
+            { account_id: sender.id, amount: -dto.amount },
+            { account_id: receiver.id, amount: receiver_amount },
+          ],
+        },
+      },
+    });
+
+    return {
+      status: 'ok',
+      transactionId: transaction.id,
+      amount: dto.amount,
+      senderBalance:
+        (await this.balanceService.getBalanceByAccountId(sender.id)) / 100,
+      receiverBalance:
+        (await this.balanceService.getBalanceByAccountId(receiver.id)) / 100,
+    };
+  }
+
+  async topUp(dto: TopUpDto, userId: string) {
+    this.assertAmount(dto.amount);
+
+    const account = await this.ownedAccount(dto.accountId, userId);
+    const clearing = await this.clearingAccount(account.currency_code);
+
+    const transaction = await this.prisma.transaction.create({
+      data: {
+        idempotency_key: randomUUID(),
+        type: TransactionType.TOP_UP,
+        entries: {
+          create: [
+            { account_id: clearing.id, amount: -dto.amount },
+            { account_id: account.id, amount: dto.amount },
+          ],
+        },
+      },
+    });
+
+    const balance = await this.balanceService.getBalanceByAccountId(account.id);
+
+    return {
+      status: 'ok',
+      accountId: account.id,
+      amount: dto.amount,
+      transactionId: transaction.id,
+      balance: balance / 100,
+    };
+  }
+
+  private async ownedAccount(accountId: number, userId: string) {
+    const account = await this.prisma.account.findFirst({
+      where: { id: accountId, user_id: Number(userId) },
+      select: {id: true, entries: true, currency: true, currency_code: true}
+    });
+    if (!account) {
+      throw new NotFoundException('Account not found');
+    }
+    return account;
+  }
+
+  private async clearingAccount(currencyCode: string) {
+    const existing = await this.prisma.account.findFirst({
+      where: { user_id: null },
+    });
+    if (existing) {
+      return existing;
+    }
+
+    return this.prisma.account.create({
+      data: {
+        type: AccountType.STANDARD,
+        currency_code: currencyCode,
+      },
+    });
+  }
+
+  private assertAmount(amount: number) {
+    if (!Number.isInteger(amount) || amount <= 0) {
+      throw new BadRequestException('Amount must be a positive number');
+    }
+  }
 }

@@ -17,22 +17,36 @@ model User {
   status       UserStatus @default(PENDING_VERIFICATION)
   passwordHash String?
 
-  sent     Entry[] @relation("sender")
-  received Entry[] @relation("receiver")
+  accounts Account[] @relation("owner")
 
   createdAt DateTime @default(now())
 }
 
-enum EntryType {
-  TRANSFER
-  TOP_UP
-  WITHDRAWAL
+model Account {
+  id Int @id @default(autoincrement())
+
+  type          AccountType
+  currency      Currency    @relation(fields: [currency_code], references: [code])
+  currency_code String
+
+  user_id Int?
+  user    User? @relation("owner", fields: [user_id], references: [id])
+
+  entries Entry[]
+}
+
+model Currency {
+  code     String    @id @db.Char(3)
+  name     String
+  symbol   String
+  accounts Account[]
 }
 
 model Transaction {
-  id              Int      @id @default(autoincrement())
-  idempotency_key String   @unique
-  date            DateTime @default(now())
+  id              Int             @id @default(autoincrement())
+  idempotency_key String          @unique
+  type            TransactionType
+  date            DateTime        @default(now())
   entries         Entry[]
 }
 
@@ -40,13 +54,11 @@ model Entry {
   id             Int         @id @default(autoincrement())
   transaction_id Int
   transaction    Transaction @relation(fields: [transaction_id], references: [id])
-  type           EntryType
-  /// Amount in kopiykas. 1050 means 10.50.
+  account_id     Int
+  account        Account     @relation(fields: [account_id], references: [id])
   amount         Int
-  sender_id      Int?
-  sender         User?       @relation("sender", fields: [sender_id], references: [id])
-  receiver_id    Int?
-  receiver       User?       @relation("receiver", fields: [receiver_id], references: [id])
+
+  @@index([account_id])
 }
 
 // ENUMS
@@ -54,4 +66,17 @@ enum UserStatus {
   PENDING_VERIFICATION
   ACTIVE
   SUSPENDED
+}
+
+enum TransactionType {
+  TRANSFER
+  TOP_UP
+  WITHDRAWAL
+}
+
+enum AccountType {
+  STANDARD
+  SAVING
+  STUDENT
+  BUSINESS
 }

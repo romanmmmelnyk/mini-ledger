@@ -1,4 +1,5 @@
 export class PaymentDto {
-  receiverEmail: string;
+  senderAccountId: number;
+  receiverAccountId: number;
   amount: number;
 }

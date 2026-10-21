@@ -5,24 +5,28 @@ import { PrismaService } from '../prisma/prisma.service';
 export class BalanceService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getBalanceByUserId(userId: number) {
-    const entries = await this.prisma.entry.findMany({
-      where: {
-        OR: [{ sender_id: userId }, { receiver_id: userId }],
-      },
-      orderBy: [{ transaction: { date: 'asc' } }, { id: 'asc' }],
+  async getBalanceByAccountId(accountId: number) {
+    const total = await this.prisma.entry.aggregate({
+      where: { account_id: accountId },
+      _sum: { amount: true },
     });
 
-    const balance = entries.reduce((total, entry) => {
-      if (entry.receiver_id === userId) {
-        total += entry.amount;
-      }
-      if (entry.sender_id === userId) {
-        total -= entry.amount;
-      }
-      return total;
-    }, 0);
+    return total._sum.amount ?? 0;
+  }
 
-    return { balance: balance / 100 };
+  async getBalancesByAccountIds(accountIds: number[]) {
+    if (accountIds.length === 0) {
+      return new Map<number, number>();
+    }
+
+    const totals = await this.prisma.entry.groupBy({
+      by: ['account_id'],
+      where: { account_id: { in: accountIds } },
+      _sum: { amount: true },
+    });
+
+    return new Map(
+      totals.map((row) => [row.account_id, row._sum.amount ?? 0]),
+    );
   }
 }
