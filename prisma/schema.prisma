@@ -48,6 +48,7 @@ model Transaction {
   type            TransactionType
   date            DateTime        @default(now())
   entries         Entry[]
+  rate            Decimal         @default(1) @db.Decimal(20, 12)
 }
 
 model Entry {

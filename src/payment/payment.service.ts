@@ -22,6 +22,7 @@ export class PaymentService {
   async sendPayment(dto: PaymentDto, userId: string) {
     this.assertAmount(dto.amount);
     let receiver_amount = dto.amount;
+    let rate = 1;
 
     if (dto.senderAccountId === dto.receiverAccountId) {
       throw new BadRequestException('Use two different accounts');
@@ -44,13 +45,16 @@ export class PaymentService {
     }
 
     if (sender.currency.code !== receiver.currency.code) {
-      receiver_amount = dto.amount * (await this.currencyService.getExchangeRate(sender.currency.code, receiver.currency.code))
+      rate = await this.currencyService.getExchangeRate(sender.currency.code, receiver.currency.code);
+      receiver_amount = dto.amount * rate;
     }
+    console.log(rate)
 
     const transaction = await this.prisma.transaction.create({
       data: {
         idempotency_key: randomUUID(),
         type: TransactionType.TRANSFER,
+        rate: rate,
         entries: {
           create: [
             { account_id: sender.id, amount: -dto.amount },
@@ -64,6 +68,7 @@ export class PaymentService {
       status: 'ok',
       transactionId: transaction.id,
       amount: dto.amount,
+      rate,
       senderBalance:
         (await this.balanceService.getBalanceByAccountId(sender.id)) / 100,
       receiverBalance:
