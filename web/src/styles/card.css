@@ -1,0 +1,119 @@
+.bank-card {
+  --card-a: oklch(26% 0.03 165);
+  --card-b: oklch(18% 0.025 165);
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-height: 188px;
+  padding: 22px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(140deg, var(--card-a), var(--card-b));
+  color: oklch(98% 0.005 100);
+  overflow: hidden;
+  box-shadow:
+    inset 0 1px 0 oklch(100% 0 0 / 0.14),
+    0 1px 2px oklch(20% 0.05 166 / 0.2),
+    0 18px 40px -18px oklch(20% 0.06 166 / 0.55);
+}
+
+.bank-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(120% 90% at 100% 0%, oklch(100% 0 0 / 0.18), transparent 55%),
+    radial-gradient(80% 70% at 0% 100%, oklch(100% 0 0 / 0.07), transparent 60%);
+}
+
+.bank-card[data-currency='UAH'] {
+  --card-a: oklch(47% 0.11 166);
+  --card-b: oklch(31% 0.08 176);
+}
+
+.bank-card[data-currency='USD'] {
+  --card-a: oklch(42% 0.07 245);
+  --card-b: oklch(27% 0.055 262);
+}
+
+.bank-card[data-currency='EUR'] {
+  --card-a: oklch(46% 0.12 285);
+  --card-b: oklch(30% 0.095 300);
+}
+
+.bank-card-top,
+.bank-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bank-card-label {
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.88;
+}
+
+.bank-card-code {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: oklch(100% 0 0 / 0.14);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.bank-card-balance {
+  margin-top: auto;
+  font-size: clamp(30px, 4.2vw, 38px);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+
+.bank-card-number {
+  font-size: 14px;
+  opacity: 0.72;
+}
+
+.bank-card-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: oklch(100% 0 0 / 0.16);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.hero-card-back .bank-card-balance,
+.hero-card-back .bank-card-bottom,
+.aside-card-back .bank-card-balance,
+.aside-card-back .bank-card-bottom {
+  visibility: hidden;
+}
+
+.bank-card-link {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.bank-card-link:focus-visible {
+  outline: 2px solid oklch(98% 0.005 100);
+  outline-offset: -5px;
+}
+
+.bank-card[data-linked] {
+  transition: box-shadow 200ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .bank-card[data-linked]:hover {
+    box-shadow:
+      inset 0 1px 0 oklch(100% 0 0 / 0.2),
+      0 2px 4px oklch(20% 0.05 166 / 0.2),
+      0 22px 44px -16px oklch(20% 0.06 166 / 0.7);
+  }
+}

@@ -46,10 +46,8 @@ export class PaymentService {
 
     if (sender.currency.code !== receiver.currency.code) {
       rate = await this.currencyService.getExchangeRate(sender.currency.code, receiver.currency.code);
-      receiver_amount = dto.amount * rate;
+      receiver_amount = Math.round(dto.amount * rate);
     }
-    console.log(rate)
-
     const transaction = await this.prisma.transaction.create({
       data: {
         idempotency_key: randomUUID(),

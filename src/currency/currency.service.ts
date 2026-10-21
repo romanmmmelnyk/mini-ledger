@@ -24,7 +24,10 @@ export class CurrencyService {
           headers: {
             'Content-Type': 'application/json',
             'apikey': this.configService.get<string>('CURRENCY_API_SECRET'),
-            'base_currency': base_currency,
+          },
+          params: {
+            base_currency,
+            currencies: target_currency,
           },
         }),
     );

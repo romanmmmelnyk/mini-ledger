@@ -10,6 +10,7 @@ describe('HealthService', () => {
   };
 
   beforeEach(async () => {
+    jest.resetAllMocks();
     prisma.$queryRaw.mockResolvedValue([{ ok: 1 }]);
 
     const module = await Test.createTestingModule({
@@ -29,8 +30,17 @@ describe('HealthService', () => {
   it('reports the database as down when the query fails', async () => {
     prisma.$queryRaw.mockRejectedValue(new Error('connect ECONNREFUSED'));
 
-    await expect(service.check()).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
+    const error: unknown = await service.check().then(
+      () => null,
+      (caught: unknown) => caught,
     );
+
+    expect(error).toBeInstanceOf(ServiceUnavailableException);
+    expect(error).toMatchObject({
+      response: {
+        status: 'error',
+        database: 'down',
+      },
+    });
   });
 });

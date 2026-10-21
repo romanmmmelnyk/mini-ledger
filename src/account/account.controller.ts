@@ -27,6 +27,7 @@ import {
   AccountDto,
   AccountWithBalanceDto,
   BalanceDto,
+  HistoryEntryDto,
 } from './dto/account-response.dto';
 import { CreateAccountDto } from './dto/create-account.dto';
 
@@ -59,6 +60,30 @@ export class AccountController {
   @ApiOkResponse({ type: AccountWithBalanceDto, isArray: true })
   getMyAccounts(@CurrentUser() user: { userId: string }) {
     return this.service.getMyAccounts(user.userId);
+  }
+
+  @Get('history')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'History of all my accounts',
+    description: 'Newest first, with the running balance after each entry.',
+  })
+  @ApiOkResponse({ type: HistoryEntryDto, isArray: true })
+  getHistory(@CurrentUser() user: { userId: string }) {
+    return this.service.getHistory(user.userId);
+  }
+
+  @Get(':id/history')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'History of one account' })
+  @ApiParam({ name: 'id', example: 1 })
+  @ApiOkResponse({ type: HistoryEntryDto, isArray: true })
+  @ApiNotFoundResponse({ type: ErrorResponseDto })
+  getAccountHistory(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: { userId: string },
+  ) {
+    return this.service.getHistory(user.userId, id);
   }
 
   @Get(':id/balance')

@@ -4,7 +4,7 @@ import {AuthService} from "../auth/auth.service";
 import {BalanceService} from "../balance/balance.service";
 import {CurrencyService} from "../currency/currency.service";
 import {CreateAccountDto} from "./dto/create-account.dto";
-import {AccountType} from "@prisma/client";
+import {AccountType, TransactionType} from "@prisma/client";
 
 @Injectable()
 export class AccountService {
@@ -84,6 +84,69 @@ export class AccountService {
 
         const balance = await this.balanceService.getBalanceByAccountId(account.id);
         return {balance: balance / 100};
+    }
+
+    async getHistory(userId: string, accountId?: number) {
+        const user = await this.authService.findById(userId);
+        if (!user) {
+            throw new UnauthorizedException("User not found");
+        }
+
+        const accounts = await this.prisma.account.findMany({
+            where: {
+                user_id: user.id,
+                ...(accountId === undefined ? {} : {id: accountId}),
+            },
+            select: {id: true, currency_code: true},
+        });
+        if (accountId !== undefined && accounts.length === 0) {
+            throw new NotFoundException("Account not found");
+        }
+
+        const currencies = new Map(accounts.map((account) => [account.id, account.currency_code]));
+        const entries = await this.prisma.entry.findMany({
+            where: {account_id: {in: [...currencies.keys()]}},
+            orderBy: [{transaction: {date: 'asc'}}, {id: 'asc'}],
+            select: {
+                id: true,
+                amount: true,
+                account_id: true,
+                transaction: {
+                    select: {
+                        id: true,
+                        type: true,
+                        date: true,
+                        rate: true,
+                        entries: {select: {account_id: true}},
+                    },
+                },
+            },
+        });
+
+        const running = new Map<number, number>();
+        const history = entries.map((entry) => {
+            const balance = (running.get(entry.account_id) ?? 0) + entry.amount;
+            running.set(entry.account_id, balance);
+
+            const counterparty = entry.transaction.type === TransactionType.TRANSFER
+                ? entry.transaction.entries.find((other) => other.account_id !== entry.account_id)
+                : undefined;
+
+            return {
+                id: entry.id,
+                transactionId: entry.transaction.id,
+                type: entry.transaction.type,
+                date: entry.transaction.date,
+                accountId: entry.account_id,
+                currency_code: currencies.get(entry.account_id) as string,
+                amount: entry.amount / 100,
+                balance: balance / 100,
+                counterpartyAccountId: counterparty?.account_id ?? null,
+                rate: Number(entry.transaction.rate),
+            };
+        });
+
+        return history.reverse();
     }
 
     async deleteAccount(accountId: number, userId: string) {
